@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
 import type { 
   User, VideoProject, Script, VoiceOver, 
@@ -23,43 +24,25 @@ class Base44Service {
     if (value) this.userId = value;
   }
 
-  private async request(endpoint: string, options: RequestInit = {}) {
-    const url = `${this.baseUrl}${endpoint}`;
+  private get headers() {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${this.apiKey}`,
       'X-Client-Version': '1.0.0',
       'X-Platform': 'android'
     };
-
     if (this.userId) {
       headers['X-User-ID'] = this.userId;
     }
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers: { ...headers, ...options.headers }
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || `HTTP ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Base44 API Error:', error);
-      throw error;
-    }
+    return headers;
   }
 
   // Authentication
   async authenticate(email: string, password: string): Promise<User> {
-    const data = await this.request('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password })
-    });
+    const { data } = await axios.post(`${this.baseUrl}/auth/login`, 
+      { email, password },
+      { headers: this.headers }
+    );
 
     this.userId = data.user.id;
     await Preferences.set({ key: 'user_id', value: data.user.id });
@@ -69,10 +52,10 @@ class Base44Service {
   }
 
   async register(email: string, password: string, username: string): Promise<User> {
-    const data = await this.request('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, username })
-    });
+    const { data } = await axios.post(`${this.baseUrl}/auth/register`,
+      { email, password, username },
+      { headers: this.headers }
+    );
 
     this.userId = data.user.id;
     await Preferences.set({ key: 'user_id', value: data.user.id });
@@ -86,31 +69,38 @@ class Base44Service {
     this.userId = null;
   }
 
-  // Project Management (Base44 Entities)
+  // Project Management
   async createProject(project: Partial<VideoProject>): Promise<VideoProject> {
-    return this.request('/entities/projects', {
-      method: 'POST',
-      body: JSON.stringify(project)
-    });
+    const { data } = await axios.post(`${this.baseUrl}/entities/projects`,
+      project,
+      { headers: this.headers }
+    );
+    return data;
   }
 
   async getProjects(filter?: { status?: string; platform?: string }): Promise<VideoProject[]> {
     const query = filter ? `?${new URLSearchParams(filter).toString()}` : '';
-    return this.request(`/entities/projects${query}`);
+    const { data } = await axios.get(`${this.baseUrl}/entities/projects${query}`,
+      { headers: this.headers }
+    );
+    return data;
   }
 
   async updateProject(id: string, updates: Partial<VideoProject>): Promise<VideoProject> {
-    return this.request(`/entities/projects/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates)
-    });
+    const { data } = await axios.put(`${this.baseUrl}/entities/projects/${id}`,
+      updates,
+      { headers: this.headers }
+    );
+    return data;
   }
 
   async deleteProject(id: string): Promise<void> {
-    return this.request(`/entities/projects/${id}`, { method: 'DELETE' });
+    await axios.delete(`${this.baseUrl}/entities/projects/${id}`,
+      { headers: this.headers }
+    );
   }
 
-  // AI Generation via Base44 Integrations
+  // AI Generation
   async generateScript(params: {
     topic: string;
     platform: string;
@@ -118,93 +108,97 @@ class Base44Service {
     tone: string;
     model?: AIModel;
   }): Promise<Script> {
-    return this.request('/integrations/llm/generate-script', {
-      method: 'POST',
-      body: JSON.stringify({
+    const { data } = await axios.post(`${this.baseUrl}/integrations/llm/generate-script`,
+      {
         ...params,
         system_prompt: `You are an expert viral content scriptwriter for ${params.platform}. 
         Create engaging hooks, maintain high retention, and include strong CTAs.
         Return JSON with: hook, content, cta, wordCount, estimatedDuration`
-      })
-    });
+      },
+      { headers: this.headers }
+    );
+    return data;
   }
 
   async generateVoiceOver(text: string, voiceId: string, provider: string = 'kokoro'): Promise<VoiceOver> {
-    return this.request('/integrations/tts/synthesize', {
-      method: 'POST',
-      body: JSON.stringify({ text, voice_id: voiceId, provider })
-    });
+    const { data } = await axios.post(`${this.baseUrl}/integrations/tts/synthesize`,
+      { text, voice_id: voiceId, provider },
+      { headers: this.headers }
+    );
+    return data;
   }
 
   async generateImage(prompt: string, style?: string): Promise<string> {
-    const result = await this.request('/integrations/image/generate', {
-      method: 'POST',
-      body: JSON.stringify({ prompt, style, size: '1080x1920' })
-    });
-    return result.url;
+    const { data } = await axios.post(`${this.baseUrl}/integrations/image/generate`,
+      { prompt, style, size: '1080x1920' },
+      { headers: this.headers }
+    );
+    return data.url;
   }
 
   async analyzeViralPotential(projectId: string): Promise<ViralMetrics> {
-    return this.request(`/analytics/viral-score/${projectId}`);
+    const { data } = await axios.get(`${this.baseUrl}/analytics/viral-score/${projectId}`,
+      { headers: this.headers }
+    );
+    return data;
   }
 
   // Trend Discovery
   async getTrends(platform: string, category?: string): Promise<TrendData[]> {
     const query = category ? `?category=${category}` : '';
-    return this.request(`/trends/${platform}${query}`);
+    const { data } = await axios.get(`${this.baseUrl}/trends/${platform}${query}`,
+      { headers: this.headers }
+    );
+    return data;
   }
 
   async discoverNiches(keyword: string): Promise<{ niche: string; competition: number; potential: number }[]> {
-    return this.request('/analytics/niches', {
-      method: 'POST',
-      body: JSON.stringify({ keyword })
-    });
+    const { data } = await axios.post(`${this.baseUrl}/analytics/niches`,
+      { keyword },
+      { headers: this.headers }
+    );
+    return data;
   }
 
   // Competitor Analysis
   async analyzeCompetitor(channelUrl: string): Promise<Competitor> {
-    return this.request('/analytics/competitor', {
-      method: 'POST',
-      body: JSON.stringify({ channel_url: channelUrl })
-    });
+    const { data } = await axios.post(`${this.baseUrl}/analytics/competitor`,
+      { channel_url: channelUrl },
+      { headers: this.headers }
+    );
+    return data;
   }
 
   async getCompetitors(): Promise<Competitor[]> {
-    return this.request('/entities/competitors');
+    const { data } = await axios.get(`${this.baseUrl}/entities/competitors`,
+      { headers: this.headers }
+    );
+    return data;
   }
 
   // Content Calendar
   async getCalendar(month: number, year: number) {
-    return this.request(`/calendar?month=${month}&year=${year}`);
+    const { data } = await axios.get(`${this.baseUrl}/calendar?month=${month}&year=${year}`,
+      { headers: this.headers }
+    );
+    return data;
   }
 
   async scheduleContent(date: string, projectId: string, platforms: string[]) {
-    return this.request('/calendar/schedule', {
-      method: 'POST',
-      body: JSON.stringify({ date, project_id: projectId, platforms })
-    });
+    const { data } = await axios.post(`${this.baseUrl}/calendar/schedule`,
+      { date, project_id: projectId, platforms },
+      { headers: this.headers }
+    );
+    return data;
   }
 
   // Bulk Operations
   async bulkGenerate(scripts: string[], template: string): Promise<VideoProject[]> {
-    return this.request('/bulk/generate', {
-      method: 'POST',
-      body: JSON.stringify({ scripts, template })
-    });
-  }
-
-  // Real-time subscriptions (WebSocket simulation via polling for mobile)
-  subscribeToProjectUpdates(projectId: string, callback: (data: any) => void) {
-    const interval = setInterval(async () => {
-      try {
-        const project = await this.request(`/entities/projects/${projectId}`);
-        callback(project);
-      } catch (error) {
-        console.error('Subscription error:', error);
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
+    const { data } = await axios.post(`${this.baseUrl}/bulk/generate`,
+      { scripts, template },
+      { headers: this.headers }
+    );
+    return data;
   }
 }
 
